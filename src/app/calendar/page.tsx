@@ -68,18 +68,28 @@ export default function CalendarPage() {
 
     try {
       for (const task of tasks) {
+        // Skip tasks that already have calendar_event_id (already synced)
+        if (task.calendar_event_id) continue;
+
         if (task.due_date && task.status !== 'Done') {
           const dueDate = new Date(task.due_date);
+          if (task.due_time) {
+            const [hours, minutes] = task.due_time.split(':');
+            dueDate.setHours(parseInt(hours), parseInt(minutes));
+          } else {
+            dueDate.setHours(9, 0, 0, 0);
+          }
+
           const endDate = new Date(dueDate);
           endDate.setHours(endDate.getHours() + 1);
 
-          await fetch('/api/calendar', {
+          const response = await fetch('/api/calendar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'create',
               event: {
-                title: `[Task] ${task.title}`,
+                title: task.title,
                 description: task.description || '',
                 start: dueDate.toISOString(),
                 end: endDate.toISOString(),
@@ -87,11 +97,31 @@ export default function CalendarPage() {
               },
             }),
           });
+
+          const data = await response.json();
+
+          // Update task with calendar_event_id
+          if (data.success && data.event?.id) {
+            await fetch('/api/proxy?action=updateTask', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: task.id,
+                calendar_event_id: data.event.id,
+              }),
+            });
+          }
+
           syncedCount++;
         }
       }
 
-      toast.success(`Synced ${syncedCount} tasks to Google Calendar`);
+      if (syncedCount > 0) {
+        toast.success(`Synced ${syncedCount} tasks to Google Calendar`);
+        await fetchTasks(); // Refresh tasks to get updated calendar_event_id
+      } else {
+        toast.success('All tasks are already synced');
+      }
       await fetchGoogleEvents();
     } catch (error) {
       console.error('Sync error:', error);
