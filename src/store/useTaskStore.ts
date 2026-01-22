@@ -125,13 +125,24 @@ async function findAndDeleteCalendarEvents(task: Task): Promise<void> {
   }
 
   try {
-    // Get events for the task's due date
-    const [year, month, day] = task.due_date.split('-').map(Number);
-    const timeMin = new Date(year, month - 1, day, 0, 0, 0);
-    const timeMax = new Date(year, month - 1, day, 23, 59, 59);
+    // Parse the due_date - handle both YYYY-MM-DD and ISO formats
+    let taskDate: Date;
+    if (task.due_date.includes('T')) {
+      // Full ISO format: 2026-01-22T17:00:00.000Z
+      taskDate = new Date(task.due_date);
+    } else {
+      // Simple format: 2026-01-22
+      const [year, month, day] = task.due_date.split('-').map(Number);
+      taskDate = new Date(year, month - 1, day);
+    }
+
+    // Create time range for the whole day
+    const timeMin = new Date(taskDate.getFullYear(), taskDate.getMonth(), taskDate.getDate(), 0, 0, 0);
+    const timeMax = new Date(taskDate.getFullYear(), taskDate.getMonth(), taskDate.getDate(), 23, 59, 59);
 
     console.log('[Calendar] Searching for events to delete:');
     console.log('  - Task title:', task.title);
+    console.log('  - Original due_date:', task.due_date);
     console.log('  - Date range:', timeMin.toISOString(), 'to', timeMax.toISOString());
 
     const response = await axios.get('/api/calendar', {
