@@ -21,12 +21,11 @@ interface TaskStore {
   filterByPriority: (priority: Task['priority']) => Task[];
 }
 
-// Helper function to create calendar event
+// Helper: Create calendar event
 async function createCalendarEvent(data: Partial<Task>): Promise<string | undefined> {
   if (!data.due_date) return undefined;
 
   try {
-    // Parse date properly to avoid timezone issues
     const [year, month, day] = data.due_date.split('-').map(Number);
     let startDate: Date;
 
@@ -34,17 +33,13 @@ async function createCalendarEvent(data: Partial<Task>): Promise<string | undefi
       const [hours, minutes] = data.due_time.split(':').map(Number);
       startDate = new Date(year, month - 1, day, hours, minutes, 0);
     } else {
-      startDate = new Date(year, month - 1, day, 9, 0, 0); // Default 9 AM
+      startDate = new Date(year, month - 1, day, 9, 0, 0);
     }
 
     const endDate = new Date(startDate);
     endDate.setHours(endDate.getHours() + 1);
 
-    console.log('[Calendar] Creating event:', {
-      title: data.title,
-      start: startDate.toISOString(),
-      end: endDate.toISOString(),
-    });
+    console.log('[Calendar] Creating event:', data.title);
 
     const response = await axios.post('/api/calendar', {
       action: 'create',
@@ -67,7 +62,7 @@ async function createCalendarEvent(data: Partial<Task>): Promise<string | undefi
   return undefined;
 }
 
-// Helper function to update calendar event
+// Helper: Update calendar event
 async function updateCalendarEvent(eventId: string, data: Partial<Task>): Promise<boolean> {
   if (!eventId || !data.due_date) return false;
 
@@ -85,10 +80,7 @@ async function updateCalendarEvent(eventId: string, data: Partial<Task>): Promis
     const endDate = new Date(startDate);
     endDate.setHours(endDate.getHours() + 1);
 
-    console.log('[Calendar] Updating event:', eventId, {
-      title: data.title,
-      start: startDate.toISOString(),
-    });
+    console.log('[Calendar] Updating event:', eventId);
 
     const response = await axios.post('/api/calendar', {
       action: 'update',
@@ -102,7 +94,6 @@ async function updateCalendarEvent(eventId: string, data: Partial<Task>): Promis
       },
     });
 
-    console.log('[Calendar] Update response:', response.data);
     return response.data.success;
   } catch (error) {
     console.error('[Calendar] Failed to update event:', error);
@@ -110,12 +101,10 @@ async function updateCalendarEvent(eventId: string, data: Partial<Task>): Promis
   }
 }
 
-// Helper function to delete calendar event
-async function deleteCalendarEventHelper(eventId: string): Promise<boolean> {
-  if (!eventId) return false;
-
+// Helper: Delete calendar event by ID
+async function deleteCalendarEventById(eventId: string): Promise<boolean> {
   try {
-    console.log('[Calendar] Deleting event:', eventId);
+    console.log('[Calendar] Deleting event by ID:', eventId);
     const response = await axios.post('/api/calendar', {
       action: 'delete',
       eventId: eventId,
@@ -128,6 +117,63 @@ async function deleteCalendarEventHelper(eventId: string): Promise<boolean> {
   }
 }
 
+// Helper: Find and delete calendar events by task title and date
+async function findAndDeleteCalendarEvents(task: Task): Promise<void> {
+  if (!task.due_date) {
+    console.log('[Calendar] Task has no due_date, skipping calendar delete');
+    return;
+  }
+
+  try {
+    // Get events for the task's due date
+    const [year, month, day] = task.due_date.split('-').map(Number);
+    const timeMin = new Date(year, month - 1, day, 0, 0, 0);
+    const timeMax = new Date(year, month - 1, day, 23, 59, 59);
+
+    console.log('[Calendar] Searching for events to delete:');
+    console.log('  - Task title:', task.title);
+    console.log('  - Date range:', timeMin.toISOString(), 'to', timeMax.toISOString());
+
+    const response = await axios.get('/api/calendar', {
+      params: {
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+      },
+    });
+
+    const events = response.data.events || [];
+    console.log('[Calendar] Found events on this date:', events.length);
+
+    // Find all events that match the task title
+    const matchingEvents = events.filter((event: { summary?: string; id?: string }) => {
+      const eventTitle = event.summary || '';
+      // Match exact title or title with [Task] prefix
+      return eventTitle === task.title ||
+        eventTitle === `[Task] ${task.title}` ||
+        eventTitle.includes(task.title);
+    });
+
+    console.log('[Calendar] Matching events found:', matchingEvents.length);
+
+    // Delete all matching events
+    for (const event of matchingEvents) {
+      if (event.id) {
+        console.log('[Calendar] Deleting matching event:', event.id, event.summary);
+        await deleteCalendarEventById(event.id);
+      }
+    }
+
+    if (matchingEvents.length === 0) {
+      console.log('[Calendar] No matching events found to delete');
+    } else {
+      console.log('[Calendar] Successfully deleted', matchingEvents.length, 'event(s)');
+    }
+
+  } catch (error) {
+    console.error('[Calendar] Error searching/deleting events:', error);
+  }
+}
+
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
   loading: false,
@@ -137,7 +183,6 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const tasks = await tasksApi.getAll();
-      console.log('[TaskStore] Fetched tasks:', tasks?.length || 0);
       set({ tasks: Array.isArray(tasks) ? tasks : [], loading: false });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to fetch tasks';
@@ -170,17 +215,15 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   createTask: async (data) => {
     set({ loading: true });
     try {
-      // 1. Create calendar event first (if has due_date)
+      // 1. Create calendar event first
       const calendarEventId = await createCalendarEvent(data);
 
       // 2. Create task with calendar_event_id
-      console.log('[TaskStore] Creating task with calendar_event_id:', calendarEventId);
       const result = await tasksApi.create({
         ...data,
         calendar_event_id: calendarEventId,
       });
 
-      // 3. Refresh tasks
       await get().fetchTasks();
       set({ loading: false });
 
@@ -195,19 +238,16 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   updateTask: async (data) => {
     set({ loading: true });
     try {
-      // 1. Get current task to check for calendar_event_id
       const currentTask = get().tasks.find(t => t.id === data.id);
-      console.log('[TaskStore] Updating task:', data.id);
-      console.log('[TaskStore] Current calendar_event_id:', currentTask?.calendar_event_id);
 
-      // 2. If task has calendar event, update it
+      // Update calendar event if exists
       if (currentTask?.calendar_event_id && data.due_date) {
         await updateCalendarEvent(currentTask.calendar_event_id, {
           ...currentTask,
           ...data,
         });
       } else if (!currentTask?.calendar_event_id && data.due_date) {
-        // Task didn't have calendar event but now has due_date - create one
+        // Create new calendar event if didn't have one
         const newEventId = await createCalendarEvent({
           ...currentTask,
           ...data,
@@ -217,10 +257,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         }
       }
 
-      // 3. Update task in database
       await tasksApi.update(data);
-
-      // 4. Refresh tasks
       await get().fetchTasks();
       set({ loading: false });
     } catch (error: unknown) {
@@ -233,24 +270,40 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   deleteTask: async (taskId) => {
     set({ loading: true });
     try {
-      // 1. Get task before deleting to get calendar_event_id
+      // 1. Get task before deleting
       const task = get().tasks.find(t => t.id === taskId);
       console.log('[TaskStore] Deleting task:', taskId);
-      console.log('[TaskStore] Task calendar_event_id:', task?.calendar_event_id);
 
-      // 2. Delete from Google Calendar first (if has calendar_event_id)
-      if (task?.calendar_event_id) {
-        await deleteCalendarEventHelper(task.calendar_event_id);
-      } else {
-        console.log('[TaskStore] No calendar_event_id found, skipping calendar delete');
+      if (!task) {
+        console.log('[TaskStore] Task not found in store');
+        await tasksApi.delete(taskId);
+        await get().fetchTasks();
+        set({ loading: false });
+        return;
       }
 
-      // 3. Delete from database
+      console.log('[TaskStore] Task title:', task.title);
+      console.log('[TaskStore] Task due_date:', task.due_date);
+      console.log('[TaskStore] Task calendar_event_id:', task.calendar_event_id);
+
+      // 2. Try to delete by calendar_event_id first
+      if (task.calendar_event_id) {
+        console.log('[TaskStore] Attempting delete by calendar_event_id');
+        await deleteCalendarEventById(task.calendar_event_id);
+      }
+
+      // 3. ALSO search and delete by title/date (as backup and for old tasks)
+      console.log('[TaskStore] Searching and deleting by title/date...');
+      await findAndDeleteCalendarEvents(task);
+
+      // 4. Delete from database
       await tasksApi.delete(taskId);
 
-      // 4. Refresh tasks
+      // 5. Refresh tasks
       await get().fetchTasks();
       set({ loading: false });
+
+      console.log('[TaskStore] Task deletion complete');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to delete task';
       set({ error: message, loading: false });
