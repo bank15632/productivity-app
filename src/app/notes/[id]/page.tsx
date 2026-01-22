@@ -2,11 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Header from '@/components/layout/Header';
 import { useNoteStore } from '@/store/useNoteStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { ArrowLeft, Save, Hash, Link as LinkIcon, FolderOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+// Dynamic import to avoid SSR issues with TipTap
+const RichTextEditor = dynamic(() => import('@/components/notes/RichTextEditor'), {
+  ssr: false,
+  loading: () => <div className="h-64 w-full animate-pulse rounded-lg bg-gray-100" />,
+});
 
 export default function NoteEditorPage() {
   const params = useParams();
@@ -145,14 +152,12 @@ export default function NoteEditorPage() {
           </select>
         </div>
 
-        {/* Content */}
+        {/* Content - Rich Text Editor */}
         <div className="mb-6">
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Start writing... Use [[Page Name]] to create links to other notes"
-            rows={20}
-            className="w-full resize-none rounded-lg border border-gray-300 p-4 font-mono text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          <RichTextEditor
+            content={content}
+            onChange={setContent}
+            placeholder="Start writing... Click the image button to add images"
           />
         </div>
 

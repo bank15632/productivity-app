@@ -185,6 +185,9 @@ function doGet(e) {
       case 'toggleSubTaskStatus':
         result = toggleSubTaskStatus(data.subTaskId);
         break;
+      case 'uploadImage':
+        result = uploadImage(data);
+        break;
         
       default:
         result = { error: 'Invalid action' };
@@ -1321,4 +1324,79 @@ function createFromTemplate(templateId, projectId, startDate) {
     message: `Created ${createdTasks.length} tasks from template`,
     tasks: createdTasks
   };
+}
+
+// ============================================
+// IMAGE UPLOAD FUNCTIONS
+// ============================================
+
+/**
+ * Upload an image to Google Drive IMAGES folder
+ * @param {Object} data - { data: base64String, fileName: string, type: string }
+ * @returns {Object} - { success: boolean, url: string, fileId: string }
+ */
+function uploadImage(data) {
+  try {
+    if (!data.data || !data.fileName) {
+      return { success: false, error: 'Missing data or fileName' };
+    }
+
+    // Get the IMAGES folder
+    const folderId = CONFIG.FOLDERS.IMAGES;
+    const folder = DriveApp.getFolderById(folderId);
+    
+    // Extract base64 data (remove data:image/xxx;base64, prefix)
+    let base64Data = data.data;
+    let mimeType = 'image/png';
+    
+    if (base64Data.includes('base64,')) {
+      const parts = base64Data.split('base64,');
+      const mimeMatch = parts[0].match(/data:([^;]+);/);
+      if (mimeMatch) {
+        mimeType = mimeMatch[1];
+      }
+      base64Data = parts[1];
+    }
+    
+    // Decode base64 to blob
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(base64Data),
+      mimeType,
+      data.fileName
+    );
+    
+    // Create file in Drive
+    const file = folder.createFile(blob);
+    
+    // Set sharing to "Anyone with link can view"
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    // Get direct link URL for embedding
+    const fileId = file.getId();
+    const url = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    
+    return {
+      success: true,
+      url: url,
+      fileId: fileId,
+      fileName: data.fileName
+    };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Delete an image from Google Drive
+ * @param {string} fileId - Google Drive file ID
+ */
+function deleteImage(fileId) {
+  try {
+    const file = DriveApp.getFileById(fileId);
+    file.setTrashed(true);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 }
