@@ -23,6 +23,8 @@ export default function TaskCard({ task, onEdit }: TaskCardProps) {
   const [newSubTaskTitle, setNewSubTaskTitle] = useState('');
   const [showAddInput, setShowAddInput] = useState(false);
   const [showSubTaskModal, setShowSubTaskModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Get subtasks and progress for this specific task
   const subTasks = getSubTasks(task.id);
@@ -55,19 +57,21 @@ export default function TaskCard({ task, onEdit }: TaskCardProps) {
     setExpanded(!expanded);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     setShowMenu(false);
-    const confirmed = window.confirm('Are you sure you want to delete this task?');
-    if (!confirmed) return;
+    setShowDeleteModal(true);
+  };
 
-    setLoading(true);
+  const confirmDelete = async () => {
+    setDeleting(true);
     try {
       await deleteTask(task.id);
       toast.success('Task deleted');
+      setShowDeleteModal(false);
     } catch {
       toast.error('Failed to delete task');
     } finally {
-      setLoading(false);
+      setDeleting(false);
     }
   };
 
@@ -131,10 +135,10 @@ export default function TaskCard({ task, onEdit }: TaskCardProps) {
           <button
             onClick={handleToggleExpand}
             className={`mt-0.5 flex-shrink-0 rounded-full p-1 transition-colors ${expanded
-                ? 'text-blue-600'
-                : task.has_subtasks
-                  ? 'text-blue-500 hover:text-blue-600'
-                  : 'text-gray-300 hover:text-gray-500'
+              ? 'text-blue-600'
+              : task.has_subtasks
+                ? 'text-blue-500 hover:text-blue-600'
+                : 'text-gray-300 hover:text-gray-500'
               }`}
             title={expanded ? 'ซ่อนงานย่อย' : 'แสดง/เพิ่มงานย่อย'}
           >
@@ -381,6 +385,43 @@ export default function TaskCard({ task, onEdit }: TaskCardProps) {
             fetchTasks(); // Refresh tasks to update has_subtasks flag
           }}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">Delete Task</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              This will permanently remove &quot;{task.title}&quot;. This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
