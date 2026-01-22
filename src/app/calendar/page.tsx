@@ -37,21 +37,36 @@ export default function CalendarPage() {
   }, [session?.accessToken, currentMonth]);
 
   const fetchGoogleEvents = async () => {
-    if (!session?.accessToken) return;
+    console.log('[Calendar] fetchGoogleEvents called');
+    console.log('[Calendar] session?.accessToken:', !!session?.accessToken);
+
+    if (!session?.accessToken) {
+      console.log('[Calendar] No access token, skipping fetch');
+      return;
+    }
 
     setLoadingEvents(true);
     try {
       const timeMin = startOfMonth(currentMonth).toISOString();
       const timeMax = endOfMonth(currentMonth).toISOString();
 
+      console.log('[Calendar] Fetching events from', timeMin, 'to', timeMax);
+
       const response = await fetch(`/api/calendar?timeMin=${timeMin}&timeMax=${timeMax}`);
       const data = await response.json();
 
+      console.log('[Calendar] Response:', data);
+      console.log('[Calendar] Events count:', data.events?.length || 0);
+
       if (data.events) {
         setGoogleEvents(data.events);
+      } else if (data.error) {
+        console.error('[Calendar] API Error:', data.error);
+        toast.error('Failed to load Google Calendar: ' + data.error);
       }
     } catch (error) {
-      console.error('Failed to fetch Google Calendar events:', error);
+      console.error('[Calendar] Failed to fetch Google Calendar events:', error);
+      toast.error('Failed to load Google Calendar events');
     } finally {
       setLoadingEvents(false);
     }
