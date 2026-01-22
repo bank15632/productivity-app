@@ -124,9 +124,17 @@ export default function CalendarPage() {
     });
   };
 
+  // Get task calendar_event_ids to filter out from Google events
+  const taskCalendarEventIds = new Set(
+    tasks.filter(t => t.calendar_event_id).map(t => t.calendar_event_id)
+  );
+
   const getGoogleEventsForDate = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     return googleEvents.filter((event) => {
+      // Skip events that are already shown as tasks
+      if (taskCalendarEventIds.has(event.id)) return false;
+
       const eventDate = event.start?.dateTime || event.start?.date;
       if (!eventDate) return false;
       const eventDateStr = format(new Date(eventDate), 'yyyy-MM-dd');
