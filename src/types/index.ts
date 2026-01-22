@@ -27,7 +27,6 @@ export interface Task {
   due_date: string;
   due_time: string;
   location_url?: string; // Google Maps link for appointments
-  calendar_event_id?: string; // Google Calendar event ID for sync
   time_estimate: number;
   time_spent: number;
   linked_tasks: string;
@@ -37,6 +36,7 @@ export interface Task {
   recurring_pattern: string;
   parent_task_id: string;
   has_subtasks?: boolean; // Flag to indicate if this task has sub-tasks
+  calendar_event_id?: string; // Google Calendar event ID for sync
   created_at: string;
   updated_at: string;
   completed_at?: string;
@@ -107,6 +107,7 @@ export interface ApiResponse<T = unknown> {
   error?: string;
   data?: T;
   id?: string;
+  calendarEventId?: string;
 }
 
 // ============================================

@@ -78,6 +78,7 @@ function doGet(e) {
         break;
       case 'getAllTasks':
         ensureHasSubtasksColumn(); // ตรวจสอบและเพิ่ม column ถ้าไม่มี
+        ensureCalendarEventIdColumn(); // ตรวจสอบและเพิ่ม column calendar_event_id
         result = getAllTasks();
         break;
       case 'getAllNotes':
@@ -812,10 +813,10 @@ function updateTaskHasSubtasks(taskId, hasSubtasks) {
 function ensureHasSubtasksColumn() {
   const sheet = getSheet('Tasks');
   if (!sheet) return;
-  
+
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const hasSubtasksIndex = headers.indexOf('has_subtasks');
-  
+
   if (hasSubtasksIndex === -1) {
     // เพิ่ม column ใหม่
     const lastCol = sheet.getLastColumn() + 1;
@@ -823,11 +824,29 @@ function ensureHasSubtasksColumn() {
   }
 }
 
+// Helper: ตรวจสอบและเพิ่ม column calendar_event_id ถ้ายังไม่มี
+function ensureCalendarEventIdColumn() {
+  const sheet = getSheet('Tasks');
+  if (!sheet) return;
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const calendarEventIdIndex = headers.indexOf('calendar_event_id');
+
+  if (calendarEventIdIndex === -1) {
+    // เพิ่ม column ใหม่
+    const lastCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, lastCol).setValue('calendar_event_id');
+  }
+}
+
 function createTask(data) {
   const sheet = getSheet('Tasks');
   const id = generateId('T');
   const timestamp = new Date();
-  
+
+  // ตรวจสอบให้มี column calendar_event_id
+  ensureCalendarEventIdColumn();
+
   sheet.appendRow([
     id,
     data.title || '',
@@ -850,13 +869,14 @@ function createTask(data) {
     '',
     data.created_from || 'Web',
     data.location_url || '', // Google Maps URL สำหรับการนัดหมาย
-    data.has_subtasks || false // Column 22: has_subtasks flag
+    data.has_subtasks || false, // Column 22: has_subtasks flag
+    data.calendar_event_id || '' // Column 23: Google Calendar event ID
   ]);
-  
+
   // อัพเดท Analytics
   updateAnalytics('tasks_created');
-  
-  return { success: true, id: id };
+
+  return { success: true, id: id, calendarEventId: data.calendar_event_id || '' };
 }
 
 function updateTask(data) {
@@ -891,10 +911,11 @@ function updateTask(data) {
   if (data.time_spent !== undefined) sheet.getRange(rowIndex, 10).setValue(data.time_spent);
   if (data.tags !== undefined) sheet.getRange(rowIndex, 12).setValue(data.tags);
   if (data.location_url !== undefined) sheet.getRange(rowIndex, 21).setValue(data.location_url);
-  
+  if (data.calendar_event_id !== undefined) sheet.getRange(rowIndex, 23).setValue(data.calendar_event_id);
+
   // อัพเดท updated_at
   sheet.getRange(rowIndex, 18).setValue(timestamp);
-  
+
   return { success: true };
 }
 
