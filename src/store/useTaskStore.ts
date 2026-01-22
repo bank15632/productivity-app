@@ -133,23 +133,29 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     try {
       // Find the task to get calendar_event_id before deleting
       const task = get().tasks.find(t => t.id === taskId);
+      console.log('Deleting task:', taskId);
+      console.log('Task found:', task);
+      console.log('calendar_event_id:', task?.calendar_event_id);
 
-      // Delete from database first
-      await tasksApi.delete(taskId);
-
-      // If task has calendar_event_id, delete from Google Calendar too
+      // If task has calendar_event_id, delete from Google Calendar first
       if (task?.calendar_event_id) {
         try {
-          await axios.post('/api/calendar', {
+          console.log('Attempting to delete calendar event:', task.calendar_event_id);
+          const response = await axios.post('/api/calendar', {
             action: 'delete',
             eventId: task.calendar_event_id
           });
-          console.log('Deleted calendar event:', task.calendar_event_id);
+          console.log('Calendar delete response:', response.data);
         } catch (calendarError) {
           // Log but don't fail the whole operation if calendar delete fails
           console.error('Failed to delete calendar event:', calendarError);
         }
+      } else {
+        console.log('No calendar_event_id found for this task');
       }
+
+      // Delete from database
+      await tasksApi.delete(taskId);
 
       await get().fetchTasks();
       set({ loading: false });
