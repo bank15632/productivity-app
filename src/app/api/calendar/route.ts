@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getCalendarEvents, createCalendarEvent, deleteCalendarEvent } from '@/lib/googleCalendar';
+import { getCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from '@/lib/googleCalendar';
 
 export async function GET(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
 
         console.log('GET /api/calendar');
-        console.log('Session:', JSON.stringify(session, null, 2));
 
         if (!session?.accessToken) {
             console.log('No access token found');
@@ -41,7 +40,6 @@ export async function POST(req: NextRequest) {
         const session = await getServerSession(authOptions);
 
         console.log('POST /api/calendar');
-        console.log('Session:', JSON.stringify(session, null, 2));
 
         if (!session?.accessToken) {
             console.log('No access token found');
@@ -52,7 +50,8 @@ export async function POST(req: NextRequest) {
         const { action, event, eventId } = body;
 
         console.log('Action:', action);
-        console.log('Event:', JSON.stringify(event, null, 2));
+        console.log('EventId:', eventId);
+        console.log('Event data:', JSON.stringify(event, null, 2));
 
         if (action === 'create') {
             const created = await createCalendarEvent(session.accessToken, {
@@ -66,8 +65,22 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true, event: created });
         }
 
+        if (action === 'update' && eventId) {
+            const updated = await updateCalendarEvent(session.accessToken, eventId, {
+                title: event.title,
+                description: event.description || '',
+                start: new Date(event.start),
+                end: new Date(event.end),
+                allDay: event.allDay || false,
+            });
+            console.log('Updated event ID:', updated.id);
+            return NextResponse.json({ success: true, event: updated });
+        }
+
         if (action === 'delete' && eventId) {
+            console.log('Deleting event:', eventId);
             await deleteCalendarEvent(session.accessToken, eventId);
+            console.log('Event deleted successfully');
             return NextResponse.json({ success: true });
         }
 
@@ -75,6 +88,6 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error('Calendar API POST error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
-        return NextResponse.json({ error: errorMessage }, { status: 500 });
+        return NextResponse.json({ error: errorMessage, success: false }, { status: 500 });
     }
 }
