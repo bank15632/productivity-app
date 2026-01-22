@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { tasksApi } from '@/lib/api';
+import { syncTaskToCalendar } from '@/lib/calendarSync';
 import type { Task } from '@/types';
 
 interface TaskStore {
@@ -8,7 +9,7 @@ interface TaskStore {
   error: string | null;
 
   fetchTasks: () => Promise<void>;
-  createTask: (data: Partial<Task>) => Promise<void>;
+  createTask: (data: Partial<Task>, syncToCalendar?: boolean) => Promise<{ calendarEventId?: string }>;
   updateTask: (data: Partial<Task>) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
 
@@ -35,15 +36,40 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     }
   },
 
-  createTask: async (data) => {
+  createTask: async (data, syncToCalendar = true) => {
     set({ loading: true });
     try {
       await tasksApi.create(data);
       await get().fetchTasks();
       set({ loading: false });
+
+      // Auto-sync to Google Calendar if due_date exists and syncToCalendar is true
+      let calendarEventId: string | undefined;
+      if (syncToCalendar && data.due_date) {
+        try {
+          const syncResult = await syncTaskToCalendar({
+            title: data.title || '',
+            description: data.description,
+            due_date: data.due_date,
+            due_time: data.due_time,
+          });
+          if (syncResult.success) {
+            calendarEventId = syncResult.eventId;
+            console.log('Task synced to calendar, event ID:', calendarEventId);
+          } else {
+            console.log('Calendar sync skipped or failed:', syncResult.error);
+          }
+        } catch (syncError) {
+          // Don't fail the task creation if calendar sync fails
+          console.error('Calendar sync error:', syncError);
+        }
+      }
+
+      return { calendarEventId };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to create task';
       set({ error: message, loading: false });
+      return {};
     }
   },
 

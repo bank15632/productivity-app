@@ -44,12 +44,21 @@ export default function QuickAddTask({ onClose, defaultProjectId, defaultDate }:
 
     setLoading(true);
     try {
-      await createTask({
+      const result = await createTask({
         ...formData,
         status: 'ToDo',
         created_from: 'Web',
       });
-      toast.success('Task created!');
+
+      // Show success message with calendar sync info
+      if (formData.due_date && result.calendarEventId) {
+        toast.success('Task created & synced to Google Calendar! 📅');
+      } else if (formData.due_date) {
+        toast.success('Task created! (Connect Google Calendar to auto-sync)');
+      } else {
+        toast.success('Task created!');
+      }
+
       onClose();
     } catch {
       toast.error('Failed to create task');
