@@ -65,8 +65,12 @@ export default function TaskCard({ task, onEdit }: TaskCardProps) {
   const confirmDelete = async () => {
     setDeleting(true);
     try {
-      await deleteTask(task.id);
-      toast.success('Task deleted');
+      await deleteTask(task.id, task);
+      if (task.calendar_event_id) {
+        toast.success('Task and calendar event deleted');
+      } else {
+        toast.success('Task deleted');
+      }
       setShowDeleteModal(false);
     } catch {
       toast.error('Failed to delete task');

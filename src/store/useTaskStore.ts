@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { tasksApi } from '@/lib/api';
-import { syncTaskToCalendar } from '@/lib/calendarSync';
+import { syncTaskToCalendar, deleteCalendarEvent } from '@/lib/calendarSync';
 import type { Task } from '@/types';
 
 interface TaskStore {
@@ -11,13 +11,14 @@ interface TaskStore {
   fetchTasks: () => Promise<void>;
   createTask: (data: Partial<Task>, syncToCalendar?: boolean) => Promise<{ calendarEventId?: string }>;
   updateTask: (data: Partial<Task>) => Promise<void>;
-  deleteTask: (taskId: string) => Promise<void>;
+  deleteTask: (taskId: string, task?: Task) => Promise<void>;
 
   filterByStatus: (status: Task['status']) => Task[];
   filterByPriority: (priority: Task['priority']) => Task[];
   filterByDate: (date: string) => Task[];
   filterByProject: (projectId: string) => Task[];
   searchTasks: (query: string) => Task[];
+  getTaskById: (taskId: string) => Task | undefined;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -39,9 +40,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   createTask: async (data, syncToCalendar = true) => {
     set({ loading: true });
     try {
-      await tasksApi.create(data);
-      await get().fetchTasks();
-      set({ loading: false });
+      // First create the task
+      const createResponse = await tasksApi.create(data);
 
       // Auto-sync to Google Calendar if due_date exists and syncToCalendar is true
       let calendarEventId: string | undefined;
@@ -53,9 +53,17 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             due_date: data.due_date,
             due_time: data.due_time,
           });
-          if (syncResult.success) {
+          if (syncResult.success && syncResult.eventId) {
             calendarEventId = syncResult.eventId;
             console.log('Task synced to calendar, event ID:', calendarEventId);
+
+            // Update the task with the calendar event ID
+            if (createResponse?.id) {
+              await tasksApi.update({
+                id: createResponse.id,
+                calendar_event_id: calendarEventId,
+              });
+            }
           } else {
             console.log('Calendar sync skipped or failed:', syncResult.error);
           }
@@ -64,6 +72,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
           console.error('Calendar sync error:', syncError);
         }
       }
+
+      await get().fetchTasks();
+      set({ loading: false });
 
       return { calendarEventId };
     } catch (error: unknown) {
@@ -85,9 +96,26 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     }
   },
 
-  deleteTask: async (taskId) => {
+  deleteTask: async (taskId, task) => {
     set({ loading: true });
     try {
+      // If task has a calendar event ID, delete it from Google Calendar first
+      const taskToDelete = task || get().tasks.find(t => t.id === taskId);
+      if (taskToDelete?.calendar_event_id) {
+        try {
+          console.log('Deleting calendar event:', taskToDelete.calendar_event_id);
+          const deleteResult = await deleteCalendarEvent(taskToDelete.calendar_event_id);
+          if (deleteResult.success) {
+            console.log('Calendar event deleted successfully');
+          } else {
+            console.log('Failed to delete calendar event:', deleteResult.error);
+          }
+        } catch (calendarError) {
+          console.error('Error deleting calendar event:', calendarError);
+          // Continue with task deletion even if calendar delete fails
+        }
+      }
+
       await tasksApi.delete(taskId);
       await get().fetchTasks();
       set({ loading: false });
@@ -121,5 +149,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         task.description?.toLowerCase().includes(lowerQuery) ||
         task.tags?.toLowerCase().includes(lowerQuery)
     );
+  },
+
+  getTaskById: (taskId) => {
+    return get().tasks.find((task) => task.id === taskId);
   },
 }));

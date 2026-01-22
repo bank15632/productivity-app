@@ -27,6 +27,7 @@ export interface Task {
   due_date: string;
   due_time: string;
   location_url?: string; // Google Maps link for appointments
+  calendar_event_id?: string; // Google Calendar event ID for sync
   time_estimate: number;
   time_spent: number;
   linked_tasks: string;
