@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { getCalendarEvents, createCalendarEvent, deleteCalendarEvent } from '@/lib/googleCalendar';
 
 export async function GET(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
 
-        console.log('GET /api/calendar - Session:', session ? 'exists' : 'null');
-        console.log('Access token:', session?.accessToken ? 'present' : 'missing');
+        console.log('GET /api/calendar');
+        console.log('Session:', JSON.stringify(session, null, 2));
 
         if (!session?.accessToken) {
+            console.log('No access token found');
             return NextResponse.json({ error: 'Not authenticated', events: [] }, { status: 401 });
         }
 
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
         const timeMin = searchParams.get('timeMin');
         const timeMax = searchParams.get('timeMax');
 
-        console.log('Fetching events with params:', { timeMin, timeMax });
+        console.log('Fetching events:', { timeMin, timeMax });
 
         const events = await getCalendarEvents(
             session.accessToken,
@@ -26,11 +27,11 @@ export async function GET(req: NextRequest) {
             timeMax ? new Date(timeMax) : undefined
         );
 
-        console.log('Returning events:', events.length);
+        console.log('Fetched events:', events.length);
 
         return NextResponse.json({ events });
     } catch (error) {
-        console.error('Calendar API error:', error);
+        console.error('Calendar API GET error:', error);
         return NextResponse.json({ error: 'Failed to fetch calendar events', events: [] }, { status: 500 });
     }
 }
@@ -39,9 +40,11 @@ export async function POST(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
 
-        console.log('POST /api/calendar - Session:', session ? 'exists' : 'null');
+        console.log('POST /api/calendar');
+        console.log('Session:', JSON.stringify(session, null, 2));
 
         if (!session?.accessToken) {
+            console.log('No access token found');
             return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
         }
 
@@ -49,17 +52,17 @@ export async function POST(req: NextRequest) {
         const { action, event, eventId } = body;
 
         console.log('Action:', action);
-        console.log('Event data:', event);
+        console.log('Event:', JSON.stringify(event, null, 2));
 
         if (action === 'create') {
             const created = await createCalendarEvent(session.accessToken, {
                 title: event.title,
-                description: event.description,
+                description: event.description || '',
                 start: new Date(event.start),
                 end: new Date(event.end),
-                allDay: event.allDay,
+                allDay: event.allDay || false,
             });
-            console.log('Created event:', created.id);
+            console.log('Created event ID:', created.id);
             return NextResponse.json({ success: true, event: created });
         }
 
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     } catch (error) {
-        console.error('Calendar API error:', error);
+        console.error('Calendar API POST error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
         return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
